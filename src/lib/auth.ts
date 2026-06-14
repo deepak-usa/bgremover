@@ -1,8 +1,8 @@
 import { betterAuth, BetterAuthOptions } from 'better-auth';
 import { APIError } from 'better-auth/api';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { passkey } from 'better-auth/plugins/passkey';
-import { admin } from 'better-auth/plugins';
+import { admin } from 'better-auth/plugins'; // Core plugins
+import { passkey } from '@better-auth/passkey'; // New standalone passkey plugin package
 import prisma from '@/lib/prisma';
 import { headers } from 'next/headers';
 import settingsService from '@/server/settings/setting-service';
@@ -118,8 +118,21 @@ export const getAuth = async () => {
   return betterAuth(config);
 };
 
-// For backward compatibility, create an initial auth instance
-export const auth = betterAuth(await getAuthConfig());
+// Singleton fallback architecture to prevent top-level runtime await freezes
+let authInstance: ReturnType<typeof betterAuth> | null = null;
+export const auth = new Proxy({} as ReturnType<typeof betterAuth>, {
+  get(_, prop) {
+    if (!authInstance) {
+      throw new Error("Auth instance has not been initialized. Use getAuth() inside runtime components.");
+    }
+    return Reflect.get(authInstance, prop);
+  }
+});
+
+// Initialization safety hook
+getAuthConfig().then((config) => {
+  authInstance = betterAuth(config);
+});
 
 export type User = BetterAuthUser & {
   role: 'admin' | 'user';
@@ -131,7 +144,8 @@ export type Session = {
 
 export const getSession = async () => {
   try {
-    const session = await auth.api.getSession({
+    const authHandler = await getAuth();
+    const session = await authHandler.api.getSession({
       headers: await headers(),
     });
     if (!session || !session.user) {

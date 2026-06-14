@@ -13,6 +13,9 @@ if (!process.env.SECRET_KEY) {
 }
 
 const nextConfig: NextConfig = {
+  // Fixes the Prisma node_modules compilation resolution under Turbopack/Next.js 15
+  serverExternalPackages: ['@prisma/client'],
+  
   eslint: {
     ignoreDuringBuilds: true,
   },
